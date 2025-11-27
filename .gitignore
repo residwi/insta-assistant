@@ -1,0 +1,12 @@
+.env
+data/session.json
+data/tracker.db
+__pycache__/
+*.pyc
+.DS_Store
+*.py[cod]
+*$py.class
+.Python
+build/
+dist/
+*.egg-info/
