@@ -25,3 +25,12 @@ def is_fetch_suspect(
     if shortfall <= 0:
         return False
     return shortfall > max(abs_tol, reported_count * rel_tol)
+
+
+def classify_from_exists(exists: bool) -> str:
+    """Map account existence to a departure reason.
+
+    A still-existing account that left your followers = 'unfollowed'.
+    A gone account (deactivated/deleted/banned) = 'disappeared'.
+    """
+    return "unfollowed" if exists else "disappeared"

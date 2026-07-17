@@ -1,4 +1,4 @@
-from src.tracker import diff_followers, is_fetch_suspect
+from src.tracker import diff_followers, is_fetch_suspect, classify_from_exists
 
 
 def test_diff_followers_detects_departed_and_gained():
@@ -46,3 +46,11 @@ def test_fetch_suspect_uses_relative_tolerance_on_large_accounts():
     assert is_fetch_suspect(9200, 10000) is True
     # shortfall of 300 is within 5%
     assert is_fetch_suspect(9700, 10000) is False
+
+
+def test_classify_existing_account_is_unfollowed():
+    assert classify_from_exists(True) == "unfollowed"
+
+
+def test_classify_missing_account_is_disappeared():
+    assert classify_from_exists(False) == "disappeared"
