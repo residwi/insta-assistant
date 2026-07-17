@@ -2,7 +2,7 @@
 
 import sqlite3
 from contextlib import contextmanager
-from typing import List, Optional, Tuple
+from typing import Optional
 
 
 class Database:
@@ -250,119 +250,6 @@ class Database:
             """
             ).fetchall()
             return [(r["user_id"], r["username"]) for r in rows]
-
-    def save_snapshot(
-        self,
-        check_id: int,
-        user_id: str,
-        username: str,
-        is_following_me: bool,
-        i_am_following: bool,
-    ):
-        """Save a relationship snapshot"""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                INSERT INTO relationship_snapshots (
-                    check_id,
-                    user_id,
-                    username,
-                    is_following_me,
-                    i_am_following
-                )
-                VALUES (?, ?, ?, ?, ?)
-            """,
-                (check_id, user_id, username, is_following_me, i_am_following),
-            )
-
-    def used_to_follow_back(self, user_id: str) -> bool:
-        """Check if user ever followed back historically"""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                SELECT 1
-                FROM relationship_snapshots
-                WHERE user_id = ? AND is_following_me = 1
-                LIMIT 1
-            """,
-                (user_id,),
-            )
-            return cursor.fetchone() is not None
-
-    def is_marked(self, user_id: str) -> bool:
-        """Check if user already categorized"""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                SELECT 1
-                FROM accounts
-                WHERE user_id = ? AND category IS NOT NULL
-                LIMIT 1
-            """,
-                (user_id,),
-            )
-            return cursor.fetchone() is not None
-
-    def mark_account(self, user_id: str, username: str, category: str):
-        """Save category for account"""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-
-            # Insert or update account
-            cursor.execute(
-                """
-                INSERT INTO accounts (user_id, username, category, marked_at, last_updated)
-                VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                ON CONFLICT(user_id) DO UPDATE SET
-                    category = excluded.category,
-                    marked_at = CURRENT_TIMESTAMP,
-                    last_updated = CURRENT_TIMESTAMP
-            """,
-                (user_id, username, category),
-            )
-
-    def ensure_account_exists(self, user_id: str, username: str):
-        """Ensure account exists in database (for unmarked accounts)"""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                INSERT OR IGNORE INTO accounts (user_id, username)
-                VALUES (?, ?)
-            """,
-                (user_id, username),
-            )
-
-    def get_unmarked_unfollowers(self) -> List[Tuple[str, str]]:
-        """
-        Get accounts that:
-        1. User is following
-        2. Don't follow back
-        3. Used to follow back (historical)
-        4. Not marked yet
-        """
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                SELECT DISTINCT r.user_id, r.username
-                FROM relationship_snapshots r
-                LEFT JOIN accounts a ON r.user_id = a.user_id
-                WHERE r.i_am_following = 1
-                  AND r.is_following_me = 0
-                  AND (a.category IS NULL OR a.category = '')
-                  AND EXISTS (
-                    SELECT 1 FROM relationship_snapshots r2
-                    WHERE r2.user_id = r.user_id
-                      AND r2.is_following_me = 1
-                  )
-                ORDER BY r.snapshot_time DESC
-            """
-            )
-            return [(row["user_id"], row["username"]) for row in cursor.fetchall()]
 
     def has_previous_snapshots(self) -> bool:
         """Check if there are any previous snapshots"""
