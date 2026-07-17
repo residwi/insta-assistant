@@ -1,4 +1,6 @@
-from src.tracker import diff_followers, is_fetch_suspect, classify_from_exists
+import pytest
+
+from src.tracker import diff_followers, is_fetch_suspect, classify_from_exists, with_backoff
 
 
 def test_diff_followers_detects_departed_and_gained():
@@ -54,3 +56,50 @@ def test_classify_existing_account_is_unfollowed():
 
 def test_classify_missing_account_is_disappeared():
     assert classify_from_exists(False) == "disappeared"
+
+
+def test_with_backoff_returns_immediately_on_success():
+    sleeps = []
+    result = with_backoff(lambda: "ok", sleep_fn=sleeps.append, jitter_fn=lambda a, b: 0)
+    assert result == "ok"
+    assert sleeps == []
+
+
+def test_with_backoff_retries_then_succeeds():
+    calls = {"n": 0}
+    sleeps = []
+
+    def flaky():
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise ValueError("rate limited")
+        return "done"
+
+    result = with_backoff(
+        flaky,
+        retry_on=(ValueError,),
+        base_delay=1.0,
+        sleep_fn=sleeps.append,
+        jitter_fn=lambda a, b: 0,
+    )
+    assert result == "done"
+    assert calls["n"] == 3
+    assert sleeps == [1.0, 2.0]  # 1*2^0, 1*2^1
+
+
+def test_with_backoff_gives_up_after_max_retries():
+    sleeps = []
+
+    def always_fails():
+        raise ValueError("nope")
+
+    with pytest.raises(ValueError):
+        with_backoff(
+            always_fails,
+            retry_on=(ValueError,),
+            max_retries=2,
+            base_delay=1.0,
+            sleep_fn=sleeps.append,
+            jitter_fn=lambda a, b: 0,
+        )
+    assert len(sleeps) == 2  # slept before retry 1 and retry 2, then raised

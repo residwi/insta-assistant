@@ -1,5 +1,14 @@
 """Core follower-diff detection logic (pure, network-free)."""
 
+import random
+import time
+from collections.abc import Callable
+from typing import TypeVar
+
+from instagrapi.exceptions import PleaseWaitFewMinutes, RateLimitError
+
+T = TypeVar("T")
+
 
 def diff_followers(previous: set[str], current: set[str]) -> tuple[set[str], set[str]]:
     """Return (departed, gained) between two follower-id sets.
@@ -34,3 +43,29 @@ def classify_from_exists(exists: bool) -> str:
     A gone account (deactivated/deleted/banned) = 'disappeared'.
     """
     return "unfollowed" if exists else "disappeared"
+
+
+def with_backoff(
+    fn: Callable[[], T],
+    *,
+    max_retries: int = 5,
+    base_delay: float = 60.0,
+    max_delay: float = 900.0,
+    sleep_fn: Callable[[float], None] = time.sleep,
+    jitter_fn: Callable[[float, float], float] = random.uniform,
+    retry_on: tuple[type[Exception], ...] = (RateLimitError, PleaseWaitFewMinutes),
+) -> T:
+    """Call fn(), retrying on rate-limit exceptions with exponential backoff + jitter.
+
+    Re-raises the last exception once max_retries is exhausted.
+    """
+    attempt = 0
+    while True:
+        try:
+            return fn()
+        except retry_on:
+            if attempt >= max_retries:
+                raise
+            delay = min(base_delay * (2**attempt), max_delay) + jitter_fn(0, base_delay)
+            sleep_fn(delay)
+            attempt += 1
