@@ -39,66 +39,45 @@ def get_credentials() -> tuple[str, str]:
     return username, password
 
 
-def login_with_session(session_file: str = "data/session.json") -> Client:
+def login_with_session(
+    session_file: str = "data/session.json",
+    *,
+    client_factory=Client,
+    credentials_fn=get_credentials,
+) -> Client:
+    """Authenticate, validating a saved session silently before prompting.
+
+    A valid session logs in with no credential prompt. Credentials are
+    requested only when the session is missing or expired.
     """
-    Authenticate with Instagram using session-first strategy.
+    cl = client_factory()
 
-    Authentication flow:
-    1. Try existing session.json (if valid)
-    2. If invalid/missing: login with credentials
-    3. Handle 2FA if required
-    4. Handle email/SMS challenge if required
-    5. Save session for future runs
-
-    Args:
-        session_file: Path to session JSON file
-
-    Returns:
-        Client: Authenticated Instagram client
-
-    Raises:
-        SystemExit: On authentication failure
-    """
-    cl = Client()
-
-    # Step 1: Try existing session
+    # Step 1: validate an existing session WITHOUT credentials.
     if os.path.exists(session_file):
         try:
             cl.load_settings(session_file)
-            username, password = get_credentials()
-            cl.login(username, password)
-
-            # Validate session
-            cl.get_timeline_feed()
+            cl.get_timeline_feed()  # cheap authenticated call; raises if invalid
             print("Logged in using saved session")
             return cl
-
         except LoginRequired:
             print("Session expired, logging in with credentials...")
         except Exception as e:
-            print(f"Session load failed: {e}")
+            print(f"Session invalid ({e}), logging in with credentials...")
 
-    # Step 2: Fresh login with credentials
-    username, password = get_credentials()
-
+    # Step 2: fresh login with credentials.
+    username, password = credentials_fn()
     try:
         cl.login(username, password)
         cl.dump_settings(session_file)
         print("Login successful, session saved")
         return cl
-
     except TwoFactorRequired:
-        # Handle 2FA
         return _handle_2fa(cl, username, password, session_file)
-
     except ChallengeRequired:
-        # Handle email/SMS challenge
         return _handle_challenge(cl, username, password, session_file)
-
     except BadPassword:
         print("Error: Invalid username or password")
         sys.exit(1)
-
     except Exception as e:
         print(f"Error: Login failed: {e}")
         sys.exit(1)
