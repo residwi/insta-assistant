@@ -11,6 +11,7 @@ class Database:
     def __init__(self, db_path: str = "data/tracker.db"):
         self.db_path = db_path
         self.create_tables()
+        self.migrate()
 
     @contextmanager
     def get_connection(self):
@@ -109,21 +110,92 @@ class Database:
             """
             )
 
-    def create_check_record(self, total_following: int, total_followers: int) -> int:
-        """Create a new check history record and return its ID"""
+            # Follower events - departures and gains detected per check
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS follower_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    check_id INTEGER NOT NULL,
+                    user_id TEXT NOT NULL,
+                    username TEXT,
+                    kind TEXT NOT NULL,
+                    reason TEXT,
+                    detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    resolved_at TIMESTAMP,
+                    FOREIGN KEY (check_id) REFERENCES check_history(id)
+                )
+            """
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_events_reason ON follower_events(reason)"
+            )
+
+    def migrate(self):
+        """Additive migration: add new check_history columns if missing."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            existing = {row["name"] for row in cursor.execute("PRAGMA table_info(check_history)")}
+            if "follower_count" not in existing:
+                cursor.execute("ALTER TABLE check_history ADD COLUMN follower_count INTEGER")
+            if "fetch_ok" not in existing:
+                cursor.execute("ALTER TABLE check_history ADD COLUMN fetch_ok INTEGER")
+
+    def create_check_record(
+        self, total_followers: int, reported_follower_count: int, fetch_ok: bool
+    ) -> int:
+        """Create a new check history record and return its ID.
+
+        total_following is legacy (following is no longer fetched) and stored as 0.
+        """
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
                 INSERT INTO check_history (
-                    total_following,
-                    total_followers
+                    total_following, total_followers, follower_count, fetch_ok
                 )
-                VALUES (?, ?)
+                VALUES (0, ?, ?, ?)
             """,
-                (total_following, total_followers),
+                (total_followers, reported_follower_count, 1 if fetch_ok else 0),
             )
             return cursor.lastrowid
+
+    def save_follower_snapshot(self, check_id: int, followers: dict) -> None:
+        """Persist the current follower set (is_following_me=1, i_am_following=0)."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.executemany(
+                """
+                INSERT INTO relationship_snapshots (
+                    check_id, user_id, username, is_following_me, i_am_following
+                )
+                VALUES (?, ?, ?, 1, 0)
+            """,
+                [(check_id, uid, uname) for uid, uname in followers.items()],
+            )
+
+    def get_previous_followers(self) -> dict:
+        """Reconstruct the follower set from the most recent snapshot."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            row = cursor.execute(
+                "SELECT MAX(check_id) AS c FROM relationship_snapshots"
+            ).fetchone()
+            latest = row["c"]
+            if latest is None:
+                return {}
+            rows = cursor.execute(
+                """
+                SELECT user_id, username FROM relationship_snapshots
+                WHERE check_id = ? AND is_following_me = 1
+            """,
+                (latest,),
+            ).fetchall()
+            return {r["user_id"]: r["username"] for r in rows}
+
+    def has_follower_snapshots(self) -> bool:
+        """Whether any follower snapshot exists."""
+        return self.has_previous_snapshots()
 
     def update_check_record(
         self,
