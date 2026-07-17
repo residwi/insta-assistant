@@ -69,3 +69,14 @@ def with_backoff(
             delay = min(base_delay * (2**attempt), max_delay) + jitter_fn(0, base_delay)
             sleep_fn(delay)
             attempt += 1
+
+
+def fetch_followers(client) -> tuple[dict[str, str], int]:
+    """Fetch the follower list and Instagram's reported follower_count.
+
+    Returns ({user_id: username}, reported_follower_count).
+    """
+    raw = client.user_followers(client.user_id)
+    followers = {uid: user.username for uid, user in raw.items()}
+    reported = client.user_info(client.user_id).follower_count
+    return followers, reported

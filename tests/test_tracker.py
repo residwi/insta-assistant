@@ -103,3 +103,13 @@ def test_with_backoff_gives_up_after_max_retries():
             jitter_fn=lambda a, b: 0,
         )
     assert len(sleeps) == 2  # slept before retry 1 and retry 2, then raised
+
+
+def test_fetch_followers_returns_map_and_reported_count():
+    from src.tracker import fetch_followers
+    from tests.conftest import FakeClient
+
+    client = FakeClient(followers={"1": "alice", "2": "bob"}, reported_count=2)
+    followers, reported = fetch_followers(client)
+    assert followers == {"1": "alice", "2": "bob"}
+    assert reported == 2
