@@ -113,3 +113,44 @@ def test_fetch_followers_returns_map_and_reported_count():
     followers, reported = fetch_followers(client)
     assert followers == {"1": "alice", "2": "bob"}
     assert reported == 2
+
+
+def test_classify_departure_existing_account_unfollowed():
+    from src.tracker import classify_departure
+    from tests.conftest import FakeClient, FakeUser
+
+    client = FakeClient(profiles={"9": FakeUser(username="still_here")})
+    assert classify_departure(client, "9", sleep_fn=lambda s: None) == "unfollowed"
+
+
+def test_classify_departure_missing_account_disappeared():
+    from src.tracker import classify_departure
+    from tests.conftest import FakeClient
+
+    client = FakeClient(profiles={})  # unknown id -> UserNotFound
+    assert classify_departure(client, "9", sleep_fn=lambda s: None) == "disappeared"
+
+
+def test_classify_departure_retries_on_rate_limit_then_succeeds():
+    from instagrapi.exceptions import RateLimitError
+
+    from src.tracker import classify_departure
+    from tests.conftest import FakeClient, FakeUser
+
+    calls = {"n": 0}
+
+    class Flaky(FakeClient):
+        def user_info(self, user_id):
+            if user_id == self.user_id:
+                return FakeUser(follower_count=0)
+            calls["n"] += 1
+            if calls["n"] < 2:
+                raise RateLimitError("slow down")
+            return FakeUser(username="recovered")
+
+    client = Flaky()
+    sleeps = []
+    result = classify_departure(client, "9", sleep_fn=sleeps.append)
+    assert result == "unfollowed"
+    assert calls["n"] == 2
+    assert len(sleeps) == 1

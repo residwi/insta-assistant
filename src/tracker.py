@@ -5,7 +5,7 @@ import time
 from collections.abc import Callable
 from typing import TypeVar
 
-from instagrapi.exceptions import PleaseWaitFewMinutes, RateLimitError
+from instagrapi.exceptions import PleaseWaitFewMinutes, RateLimitError, UserNotFound
 
 T = TypeVar("T")
 
@@ -80,3 +80,21 @@ def fetch_followers(client) -> tuple[dict[str, str], int]:
     followers = {uid: user.username for uid, user in raw.items()}
     reported = client.user_info(client.user_id).follower_count
     return followers, reported
+
+
+def classify_departure(client, user_id: str, *, sleep_fn=time.sleep) -> str:
+    """Determine whether a departed follower 'unfollowed' or 'disappeared'.
+
+    Retries on rate-limit exceptions with backoff; re-raises if the budget is
+    exhausted so the caller can leave the departure unclassified for next run.
+    """
+
+    def _exists() -> bool:
+        try:
+            client.user_info(user_id)
+            return True
+        except UserNotFound:
+            return False
+
+    exists = with_backoff(_exists, sleep_fn=sleep_fn)
+    return classify_from_exists(exists)
