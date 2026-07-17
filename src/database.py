@@ -197,26 +197,59 @@ class Database:
         """Whether any follower snapshot exists."""
         return self.has_previous_snapshots()
 
-    def update_check_record(
-        self,
-        check_id: int,
-        non_followers_count: int,
-        new_unfollowers_count: int,
-        marked_count: int,
-    ):
-        """Update check record with results"""
+    def update_check_record(self, check_id: int, new_unfollowers_count: int) -> None:
+        """Update check record with the departure count."""
         with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                UPDATE check_history
-                SET non_followers_count = ?,
-                    new_unfollowers_count = ?,
-                    marked_count = ?
-                WHERE id = ?
-            """,
-                (non_followers_count, new_unfollowers_count, marked_count, check_id),
+            conn.execute(
+                "UPDATE check_history SET new_unfollowers_count = ? WHERE id = ?",
+                (new_unfollowers_count, check_id),
             )
+
+    def record_departure(self, check_id: int, user_id: str, username: str) -> None:
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO follower_events (check_id, user_id, username, kind, reason)
+                VALUES (?, ?, ?, 'departed', 'unclassified')
+            """,
+                (check_id, user_id, username),
+            )
+
+    def record_gain(self, check_id: int, user_id: str, username: str) -> None:
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO follower_events (check_id, user_id, username, kind, reason)
+                VALUES (?, ?, ?, 'gained', NULL)
+            """,
+                (check_id, user_id, username),
+            )
+
+    def resolve_departure(self, user_id: str, reason: str) -> None:
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                UPDATE follower_events
+                SET reason = ?, resolved_at = CURRENT_TIMESTAMP
+                WHERE id = (
+                    SELECT id FROM follower_events
+                    WHERE user_id = ? AND kind = 'departed' AND reason = 'unclassified'
+                    ORDER BY id DESC LIMIT 1
+                )
+            """,
+                (reason, user_id),
+            )
+
+    def get_unresolved_departures(self) -> list[tuple[str, str]]:
+        with self.get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT user_id, username FROM follower_events
+                WHERE kind = 'departed' AND reason = 'unclassified'
+                ORDER BY id
+            """
+            ).fetchall()
+            return [(r["user_id"], r["username"]) for r in rows]
 
     def save_snapshot(
         self,
