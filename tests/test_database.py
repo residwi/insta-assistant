@@ -8,8 +8,7 @@ def test_migrate_adds_new_columns(db):
 def test_follower_events_table_exists(db):
     with db.get_connection() as conn:
         names = {
-            row["name"]
-            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            row["name"] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
     assert "follower_events" in names
 

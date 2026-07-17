@@ -26,7 +26,7 @@ def resolve_pending(client, db, *, sleep_fn=time.sleep, out=print) -> None:
             reason = classify_departure(client, user_id, sleep_fn=sleep_fn)
             db.resolve_departure(user_id, reason)
             out(f"  @{username}: {reason}")
-        except (RateLimitError, PleaseWaitFewMinutes):
+        except RateLimitError, PleaseWaitFewMinutes:
             out(f"  @{username}: still rate-limited, will retry next run")
             break
 
@@ -44,10 +44,7 @@ def check(client, db, *, sleep_fn=time.sleep, out=print) -> None:
     )
 
     if not fetch_ok:
-        out(
-            f"WARNING: fetched only {len(followers)} of ~{reported} followers — "
-            "likely throttled."
-        )
+        out(f"WARNING: fetched only {len(followers)} of ~{reported} followers — likely throttled.")
         out("Skipping diff to avoid recording false unfollowers. Try again later.")
         return
 
@@ -75,7 +72,7 @@ def check(client, db, *, sleep_fn=time.sleep, out=print) -> None:
         try:
             reasons[uid] = classify_departure(client, uid, sleep_fn=sleep_fn)
             db.resolve_departure(uid, reasons[uid])
-        except (RateLimitError, PleaseWaitFewMinutes):
+        except RateLimitError, PleaseWaitFewMinutes:
             reasons[uid] = "unclassified"
 
     _report(out, departed, gained, reasons)
@@ -105,7 +102,7 @@ def run() -> None:
         client = login_with_session()
         print()
         check(client, db)
-    except (RateLimitError, PleaseWaitFewMinutes):
+    except RateLimitError, PleaseWaitFewMinutes:
         print("\nError: Rate limit exceeded. Instagram is blocking requests. Try again later.")
         sys.exit(1)
     except KeyboardInterrupt:

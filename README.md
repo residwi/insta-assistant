@@ -1,30 +1,32 @@
-# Instagram Unfollower Tracker
+# Instagram Follower-Diff Tracker
 
-A command-line tool to detect people who used to follow you back on Instagram but have since unfollowed. Features an interactive marking system to categorize accounts as influencers or unfollowers.
+A command-line tool that detects who unfollowed you by comparing your follower list between runs, and tells you whether each departure *unfollowed* you or *disappeared* (deactivated/deleted/banned).
 
 ## Features
 
-- **Smart Detection**: Identifies accounts you follow that don't follow you back
+- **Follower Diff Detection**: Compares your follower list between runs to find who left
+- **Departure Classification**: Labels each departure as `unfollowed` (account still exists) or `disappeared` (deactivated/deleted/banned)
+- **Sanity Gate**: A throttled or partial fetch is skipped automatically — no false unfollowers recorded
 - **Session Persistence**: Saves Instagram session to avoid repeated logins
 - **2FA Support**: Full support for two-factor authentication
-- **Interactive Marking**: Categorize accounts as influencers or unfollowers
-- **Historical Tracking**: SQLite database saves snapshots and categorization
+- **Historical Tracking**: SQLite database saves snapshots and run metadata
 
 ## Requirements
 
-- Python 3.8 or higher
+- Python 3.14 or higher
+- [uv](https://docs.astral.sh/uv/)
 
 ## Installation
 
 1. Clone or download this repository
 
-1. Install dependencies:
+2. Install dependencies:
 
 ```bash
-pip install -r requirements.txt
+uv sync
 ```
 
-1. (Optional) Create `.env` file for credentials:
+3. (Optional) Create `.env` file for credentials:
 
 ```bash
 cp .env.example .env
@@ -33,81 +35,32 @@ cp .env.example .env
 
 ## Usage
 
-### First Run - Establish Baseline
+### First Run — Establish Baseline
 
 Run the program to create an initial snapshot:
 
 ```bash
-python main.py
+uv run main.py
 ```
 
-If you haven't created a `.env` file, you'll be prompted for credentials:
+If no `.env` file or saved session exists, you'll be prompted for credentials.
 
-```output
-Instagram username: your_username
-Instagram password: ********
-```
+The first run saves a baseline snapshot. No diff is shown because there is nothing to compare against yet.
 
-**First run output:**
-
-```output
-Login successful, session saved
-
-Fetching following list... (1,500 accounts)
-Fetching followers list... (1,234 accounts)
-
-Baseline established.
-You follow 1,500 accounts
-1,234 follow you back
-266 don't follow back
-
-Saved snapshot.
-```
-
-### Subsequent Runs - Detect Unfollowers
-
-Run the program again to detect changes:
+### Subsequent Runs — Detect Changes
 
 ```bash
-python main.py
+uv run main.py
 ```
 
-**Example output with unfollowers:**
+**Example output:**
 
 ```output
-Logged in using saved session
-
-Fetching following list... (1,500 accounts)
-Fetching followers list... (1,230 accounts)
-
-Detected 4 accounts that don't follow you back:
-
-Account: @john_doe
-Mark as (i)nfluencer, (u)nfollower, or (s)kip? u
-Marked as unfollower.
-
-Account: @celebrity_account
-Mark as (i)nfluencer, (u)nfollower, or (s)kip? i
-Marked as influencer.
-
-Account: @user123
-Mark as (i)nfluencer, (u)nfollower, or (s)kip? s
-Skipped (will appear next run).
-
-Summary:
-- Total marked: 2
-- Influencers: 1
-- Unfollowers: 1
-- Skipped: 1
+Since last check:
+  Unfollowed you (1): @john_doe
+  Disappeared (0):
+  New followers (2): @alice, @bob
 ```
-
-### Marking Options
-
-When prompted to categorize an account:
-
-- **`i` (Influencer)**: Mark as celebrity/influencer - will never appear again
-- **`u` (Unfollower)**: Mark as regular unfollower - will never appear again
-- **`s` (Skip)**: Don't categorize - will appear in next run
 
 ## Authentication
 
@@ -115,7 +68,7 @@ The tool uses a multi-tier authentication system:
 
 ### 1. Session File (Fastest)
 
-After first login, session is saved to `data/session.json`. Future runs use this session automatically.
+After first login, the session is saved to `data/session.json`. Future runs use this session automatically with no prompt.
 
 ### 2. Environment Variables
 
@@ -126,9 +79,11 @@ INSTAGRAM_USERNAME=your_username
 INSTAGRAM_PASSWORD=your_password
 ```
 
+Credentials are only used when the saved session has expired.
+
 ### 3. Standard Input
 
-If no `.env` file exists, you'll be prompted for credentials each time.
+If no `.env` file exists and the session has expired, you'll be prompted for credentials.
 
 ### Two-Factor Authentication (2FA)
 
@@ -154,74 +109,81 @@ Login successful after challenge, session saved
 
 ## How It Works
 
-1. **Fetch Data**: Retrieves your following and followers lists from Instagram
-2. **Compare**: Identifies accounts you follow that don't follow back
-3. **Filter Marked**: Excludes accounts already categorized as influencer/unfollower
-4. **Interactive Marking**: Prompts you to categorize each unmarked account
-5. **Save Snapshot**: Stores current state and categorization in database
+1. **Validate Session**: Checks the saved session; prompts for credentials only if expired
+2. **Fetch Followers**: Retrieves your follower list from Instagram
+3. **Sanity Gate**: Compares the fetched count against Instagram's reported count; aborts the run if the fetch appears throttled or incomplete
+4. **Diff vs Last Snapshot**: Identifies who left and who joined since the last run
+5. **Classify Departures**: For each departure, checks whether the account still exists (unfollowed) or has vanished (disappeared), with rate-limit backoff between checks
+6. **Report + Save**: Prints the delta and saves the snapshot and events to the database
 
 ## Database
 
-Data is stored in `data/tracker.db` with three tables:
+Data is stored in `data/tracker.db` with the following tables:
 
-- **accounts**: Categorization of accounts (influencer/unfollower)
-- **relationship_snapshots**: Historical follower/following data
-- **check_history**: Metadata for each run
+- **follower_events**: Records each departure and gain, with departure type (`unfollowed` or `disappeared`)
+- **check_history**: Metadata for each run, including `follower_count` (fetched count), `reported_follower_count`, and `fetch_ok` (whether the sanity gate passed)
+- **accounts**: Retained for historical influencer marks from the previous version; no longer written by the tracker
 
 ## Project Structure
 
 ```output
-instagram-unfollower-tracker/
+instagram-follower-diff-tracker/
 ├── src/
 │   ├── __init__.py
 │   ├── auth.py           # Authentication & session management
 │   ├── database.py       # SQLite operations
-│   ├── tracker.py        # Unfollower detection logic
-│   ├── marker.py         # Interactive marking system
-│   └── cli.py            # CLI interface
+│   ├── tracker.py        # Follower fetch + diff logic
+│   └── cli.py            # CLI orchestration
+├── tests/
+│   ├── conftest.py       # Shared fixtures
+│   ├── test_auth.py
+│   ├── test_cli.py
+│   ├── test_database.py
+│   └── test_tracker.py
 ├── data/
 │   ├── session.json      # Instagram session (auto-generated)
 │   └── tracker.db        # SQLite database (auto-generated)
 ├── main.py               # Entry point
-├── requirements.txt      # Dependencies
+├── pyproject.toml        # Project metadata and tool config
+├── uv.lock               # Pinned dependency lockfile
 ├── .env.example          # Environment template
 └── README.md             # This file
 ```
 
 ## Troubleshooting
 
+### "Fetched only N of ~M followers — likely throttled"
+
+Instagram rate-limited the fetch. The run is skipped so no false unfollowers are recorded; try again in 30–60 minutes.
+
 ### "Error: Rate limit exceeded"
 
-Instagram is blocking requests. Wait 30-60 minutes before trying again.
+Instagram is blocking requests. Wait 30–60 minutes before trying again.
 
 ### "Error: Invalid username or password"
 
-Check your credentials in `.env` file or re-enter them when prompted.
+Check your credentials in `.env` or re-enter them when prompted.
 
 ### "Session expired, logging in with credentials..."
 
-Normal behavior - session has expired and will be refreshed automatically.
+Normal behavior — the session has expired and will be refreshed automatically.
 
 ### "Error: 2FA verification failed"
 
 Double-check the verification code from your authenticator app.
 
-### First run shows "Baseline established"
-
-This is normal. The first run saves the snapshot. On the second run, you'll be able to mark non-followers interactively.
-
 ## Security Notes
 
 - Never commit `.env` or `data/session.json` to version control
-- Session file contains authentication tokens - keep it private
+- Session file contains authentication tokens — keep it private
 - Use environment variables or stdin for credentials, never hardcode
 - The `.gitignore` file is configured to exclude sensitive files
 
 ## Limitations
 
-- First run establishes baseline, subsequent runs show unmarked non-followers
+- The first run establishes a baseline; the diff appears on the second run
 - Large follower counts (>5k) may take several minutes to fetch
-- Instagram rate limits may throttle requests
+- Instagram rate limits may throttle requests; the sanity gate will skip a partial fetch automatically
 - Session expires periodically and requires re-authentication
 
 ## License

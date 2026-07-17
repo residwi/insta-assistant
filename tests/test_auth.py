@@ -39,8 +39,8 @@ def test_valid_session_logs_in_silently_without_credentials(tmp_path):
     )
     assert client is fake
     assert fake.loaded is True
-    assert fake.logged_in is False       # never logged in
-    assert creds_called["n"] == 0        # never prompted
+    assert fake.logged_in is False  # never logged in
+    assert creds_called["n"] == 0  # never prompted
 
 
 def test_expired_session_falls_back_to_credential_login(tmp_path):
@@ -60,7 +60,7 @@ def test_expired_session_falls_back_to_credential_login(tmp_path):
 
 def test_missing_session_logs_in_with_credentials(tmp_path):
     fake = FakeClient(session_valid=True)
-    client = login_with_session(
+    login_with_session(
         session_file=str(tmp_path / "nope.json"),
         client_factory=lambda: fake,
         credentials_fn=lambda: ("u", "p"),

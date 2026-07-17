@@ -2,7 +2,6 @@
 
 import sqlite3
 from contextlib import contextmanager
-from typing import Optional
 
 
 class Database:
@@ -178,9 +177,7 @@ class Database:
         """Reconstruct the follower set from the most recent snapshot."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            row = cursor.execute(
-                "SELECT MAX(check_id) AS c FROM relationship_snapshots"
-            ).fetchone()
+            row = cursor.execute("SELECT MAX(check_id) AS c FROM relationship_snapshots").fetchone()
             latest = row["c"]
             if latest is None:
                 return {}
@@ -258,7 +255,7 @@ class Database:
             cursor.execute("SELECT 1 FROM relationship_snapshots LIMIT 1")
             return cursor.fetchone() is not None
 
-    def get_stats(self) -> Optional[dict]:
+    def get_stats(self) -> dict | None:
         """Get latest check statistics"""
         with self.get_connection() as conn:
             cursor = conn.cursor()

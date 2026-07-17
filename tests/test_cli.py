@@ -20,9 +20,7 @@ def test_suspect_fetch_warns_and_skips_snapshot(db):
     c = db.create_check_record(total_followers=112, reported_follower_count=112, fetch_ok=True)
     db.save_follower_snapshot(c, {str(i): f"u{i}" for i in range(112)})
     # now a throttled fetch: only 90 of reported 112
-    client = FakeClient(
-        followers={str(i): f"u{i}" for i in range(90)}, reported_count=112
-    )
+    client = FakeClient(followers={str(i): f"u{i}" for i in range(90)}, reported_count=112)
     out, sink = _lines()
     check(client, db, sleep_fn=lambda s: None, out=sink)
     # baseline snapshot unchanged (still 112 in latest good snapshot)
@@ -42,9 +40,9 @@ def test_detects_unfollower_and_classifies(db):
     )
     out, sink = _lines()
     check(client, db, sleep_fn=lambda s: None, out=sink)
-    assert db.get_unresolved_departures() == []          # classified, not pending
+    assert db.get_unresolved_departures() == []  # classified, not pending
     assert any("unfollowed" in line.lower() for line in out)
-    assert db.get_previous_followers() == {"1": "alice"}   # snapshot advanced
+    assert db.get_previous_followers() == {"1": "alice"}  # snapshot advanced
 
 
 def test_disappeared_account_classified_as_disappeared(db):

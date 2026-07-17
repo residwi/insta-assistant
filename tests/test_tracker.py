@@ -1,6 +1,6 @@
 import pytest
 
-from src.tracker import diff_followers, is_fetch_suspect, classify_from_exists, with_backoff
+from src.tracker import classify_from_exists, diff_followers, is_fetch_suspect, with_backoff
 
 
 def test_diff_followers_detects_departed_and_gained():

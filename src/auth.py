@@ -112,9 +112,7 @@ def _handle_2fa(cl: Client, username: str, password: str, session_file: str) -> 
         sys.exit(1)
 
 
-def _handle_challenge(
-    cl: Client, username: str, password: str, session_file: str
-) -> Client:
+def _handle_challenge(cl: Client, username: str, password: str, session_file: str) -> Client:
     """
     Handle Instagram security challenge (email/SMS verification).
 

@@ -45,7 +45,7 @@ def classify_from_exists(exists: bool) -> str:
     return "unfollowed" if exists else "disappeared"
 
 
-def with_backoff(
+def with_backoff[T](
     fn: Callable[[], T],
     *,
     max_retries: int = 5,
