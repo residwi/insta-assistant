@@ -109,6 +109,7 @@ def run() -> None:
         client = login_with_session()
         print()
         check(client, db)
+    # py3.14 PEP 758: parens optional; catches both
     except RateLimitError, PleaseWaitFewMinutes:
         print("\nError: Rate limit exceeded. Instagram is blocking requests. Try again later.")
         sys.exit(1)
