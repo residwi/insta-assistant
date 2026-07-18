@@ -61,8 +61,6 @@ def login_with_session(
             return cl
         except LoginRequired:
             print("Session expired, logging in with credentials...")
-        except Exception as e:
-            print(f"Session invalid ({e}), logging in with credentials...")
 
     # Step 2: fresh login with credentials.
     username, password = credentials_fn()

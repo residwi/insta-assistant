@@ -95,6 +95,8 @@ class Database:
             )
 
             # Check history - run metadata
+            # NOTE: total_following, non_followers_count, marked_count are legacy/unused in the
+            # follower-diff model — retained for backward compatibility with existing databases.
             cursor.execute(
                 """
                 CREATE TABLE IF NOT EXISTS check_history (
@@ -159,7 +161,7 @@ class Database:
             )
             return cursor.lastrowid
 
-    def save_follower_snapshot(self, check_id: int, followers: dict) -> None:
+    def save_follower_snapshot(self, check_id: int, followers: dict[str, str]) -> None:
         """Persist the current follower set (is_following_me=1, i_am_following=0)."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
@@ -173,7 +175,7 @@ class Database:
                 [(check_id, uid, uname) for uid, uname in followers.items()],
             )
 
-    def get_previous_followers(self) -> dict:
+    def get_previous_followers(self) -> dict[str, str]:
         """Reconstruct the follower set from the most recent snapshot."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
@@ -203,6 +205,7 @@ class Database:
             )
 
     def record_departure(self, check_id: int, user_id: str, username: str) -> None:
+        """Record a newly detected departure as 'unclassified' pending classification."""
         with self.get_connection() as conn:
             conn.execute(
                 """
@@ -213,6 +216,7 @@ class Database:
             )
 
     def record_gain(self, check_id: int, user_id: str, username: str) -> None:
+        """Record a newly detected follower gain."""
         with self.get_connection() as conn:
             conn.execute(
                 """
@@ -223,6 +227,7 @@ class Database:
             )
 
     def resolve_departure(self, user_id: str, reason: str) -> None:
+        """Stamp the most recent unclassified departure for user_id with its reason."""
         with self.get_connection() as conn:
             conn.execute(
                 """
@@ -238,6 +243,7 @@ class Database:
             )
 
     def get_unresolved_departures(self) -> list[tuple[str, str]]:
+        """Return all departures still classified as 'unclassified', oldest first."""
         with self.get_connection() as conn:
             rows = conn.execute(
                 """

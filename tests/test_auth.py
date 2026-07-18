@@ -1,3 +1,6 @@
+import pytest
+from instagrapi.exceptions import RateLimitError
+
 from src.auth import login_with_session
 
 
@@ -66,3 +69,47 @@ def test_missing_session_logs_in_with_credentials(tmp_path):
         credentials_fn=lambda: ("u", "p"),
     )
     assert fake.logged_in is True
+
+
+def test_rate_limit_during_session_validation_propagates(tmp_path):
+    """RateLimitError from get_timeline_feed must propagate, not swallow into a fresh login."""
+    session = tmp_path / "session.json"
+    session.write_text("{}")
+
+    class RateLimitedClient:
+        def __init__(self):
+            self.loaded = False
+            self.logged_in = False
+            self.dumped = False
+
+        def load_settings(self, path):
+            self.loaded = True
+
+        def get_timeline_feed(self):
+            raise RateLimitError("slow down")
+
+        def login(self, username, password, verification_code=""):
+            self.logged_in = True
+
+        def dump_settings(self, path):
+            self.dumped = True
+
+    fake = RateLimitedClient()
+    creds_called = {"n": 0}
+
+    def creds():
+        creds_called["n"] += 1
+        return ("u", "p")
+
+    with pytest.raises(RateLimitError):
+        login_with_session(
+            session_file=str(session),
+            client_factory=lambda: fake,
+            credentials_fn=creds,
+        )
+
+    assert creds_called["n"] == 0, "credentials_fn must not be called"
+    assert fake.logged_in is False, "login() must not be called"
+    assert fake.dumped is False, "dump_settings() must not be called"
+    # session file must be untouched (still contains the original content)
+    assert session.read_text() == "{}"

@@ -26,6 +26,7 @@ def resolve_pending(client, db, *, sleep_fn=time.sleep, out=print) -> None:
             reason = classify_departure(client, user_id, sleep_fn=sleep_fn)
             db.resolve_departure(user_id, reason)
             out(f"  @{username}: {reason}")
+        # py3.14 PEP 758: parens optional; catches both
         except RateLimitError, PleaseWaitFewMinutes:
             out(f"  @{username}: still rate-limited, will retry next run")
             break
@@ -85,14 +86,20 @@ def _report(out, departed, gained, reasons) -> None:
     gained_names = [n for _uid, n in gained]
 
     out("\nSince last check:")
-    out(f"  Unfollowed you ({len(unfollowed)}): " + ", ".join(f"@{n}" for n in unfollowed))
-    out(f"  Disappeared ({len(disappeared)}): " + ", ".join(f"@{n}" for n in disappeared))
+    if not unfollowed and not disappeared and not pending and not gained_names:
+        out("  No changes since last check.")
+        return
+    if unfollowed:
+        out(f"  Unfollowed you ({len(unfollowed)}): " + ", ".join(f"@{n}" for n in unfollowed))
+    if disappeared:
+        out(f"  Disappeared ({len(disappeared)}): " + ", ".join(f"@{n}" for n in disappeared))
     if pending:
         out(
             f"  Rate-limited, will classify next run ({len(pending)}): "
             + ", ".join(f"@{n}" for n in pending)
         )
-    out(f"  New followers ({len(gained_names)}): " + ", ".join(f"@{n}" for n in gained_names))
+    if gained_names:
+        out(f"  New followers ({len(gained_names)}): " + ", ".join(f"@{n}" for n in gained_names))
 
 
 def run() -> None:
