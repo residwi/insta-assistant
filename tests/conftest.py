@@ -40,3 +40,6 @@ class FakeClient:
         if isinstance(val, Exception):
             raise val
         return val
+
+    def user_info_v1(self, user_id):
+        return self.user_info(user_id)

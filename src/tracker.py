@@ -90,8 +90,10 @@ def classify_departure(client, user_id: str, *, sleep_fn=time.sleep) -> str:
     """
 
     def _exists() -> bool:
+        # v1 only: user_info() treats a v1 404 as "try public GraphQL", which
+        # Instagram answers with an HTML login wall -> ClientJSONDecodeError.
         try:
-            client.user_info(user_id)
+            client.user_info_v1(user_id)
             return True
         except UserNotFound:
             return False

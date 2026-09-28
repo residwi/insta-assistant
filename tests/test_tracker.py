@@ -154,3 +154,21 @@ def test_classify_departure_retries_on_rate_limit_then_succeeds():
     assert result == "unfollowed"
     assert calls["n"] == 2
     assert len(sleeps) == 1
+
+
+def test_classify_departure_uses_v1_not_public_fallback():
+    """A v1 404 means the account is gone. user_info() would swallow it and fall
+    back to public GraphQL, which Instagram now answers with HTML."""
+    from instagrapi.exceptions import ClientJSONDecodeError, UserNotFound
+
+    from src.tracker import classify_departure
+    from tests.conftest import FakeClient
+
+    class Gone(FakeClient):
+        def user_info(self, user_id):
+            raise ClientJSONDecodeError("html instead of json")
+
+        def user_info_v1(self, user_id):
+            raise UserNotFound(user_id)
+
+    assert classify_departure(Gone(), "9", sleep_fn=lambda s: None) == "disappeared"
